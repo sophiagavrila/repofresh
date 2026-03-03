@@ -1,17 +1,37 @@
 # repofresh
 
-Keep every repo in a workspace directory up-to-date so your AI coding tools always query the latest code.
+Pull the latest code across all your repos and index everything with [QMD](https://github.com/tobi/qmd) so your AI coding tools can search, understand, and reason over your entire codebase — instantly.
 
-## The Problem
+## Why This Exists
 
-If you work across many repositories (10, 30, 50+), they drift out of date fast. Every morning your local copies are stale. This causes two problems:
+AI coding tools (Claude Code, GitHub Copilot, Cursor, Windsurf, etc.) are only as smart as the code they can see. If you work across many repositories, two things go wrong:
 
-1. **Your code is old.** You're reading yesterday's (or last week's) version of files that teammates have already changed.
-2. **Your AI tools are blind.** Tools like [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [GitHub Copilot](https://github.com/features/copilot), [Cursor](https://cursor.sh), or any coding agent that indexes local files will search, suggest, and answer questions based on outdated code. If you use a local search index like [QMD](https://github.com/tobi/qmd), it's only as fresh as the files on disk.
+1. **Your repos drift out of date.** You sit down in the morning and your local copies are a day or a week behind. Your AI agent reads stale files and gives stale answers.
 
-## The Solution
+2. **Your AI can't search across repos efficiently.** Even if the files are current, tools that scan the filesystem file-by-file are slow and miss context. You need a search index.
 
-`repofresh` walks every subdirectory in your workspace, pulls the latest default branch (`main` or `master`) for each git repo, then optionally re-indexes your local search tool. A companion macOS prompt asks for your approval each morning so nothing runs without you knowing.
+**repofresh solves both problems in one command.** It pulls every repo to the latest, then indexes all source code into a local [QMD](https://github.com/tobi/qmd) database that any AI tool can query in milliseconds.
+
+## What is QMD?
+
+[QMD](https://github.com/tobi/qmd) (Query Markup Documents) is an **on-device search engine** for your source code and documentation. It runs entirely on your machine — no cloud, no API keys, no data leaving your laptop.
+
+**What it builds:** A local SQLite database (`~/.cache/qmd/index.sqlite`) containing every file across all your repos, chunked and indexed three ways:
+
+| Search Method | How it Works | When it Helps |
+|---------------|-------------|---------------|
+| **Full-text search (BM25)** | Traditional keyword matching, ranked by relevance | "Find all files that reference `VulnerabilityAggregatorClient`" |
+| **Vector embeddings** | Each code chunk is converted to a numeric vector that captures its meaning | "Find code that handles authentication failures" (even if it never uses the word "authentication") |
+| **LLM reranking** | A small local model re-scores results for the best final ordering | Combines keyword + semantic results into one high-quality ranked list |
+
+**What this means for your AI tools:**
+
+- **Claude Code / Copilot / Cursor** can search 50+ repos in milliseconds instead of scanning the filesystem
+- **Semantic search** finds relevant code even when you don't know the exact function name or variable
+- **Everything stays local** — your code never leaves your machine
+- **Always fresh** — repofresh re-indexes after every pull so the index matches the latest `main`
+
+QMD also exposes an [MCP server](https://github.com/tobi/qmd#mcp-server) so AI tools can query the index directly via the Model Context Protocol.
 
 ---
 
@@ -19,7 +39,7 @@ If you work across many repositories (10, 30, 50+), they drift out of date fast.
 
 - [Quick Start](#quick-start)
 - [What's in the Box](#whats-in-the-box)
-- [How the Sync Works](#how-the-sync-works)
+- [How It Works](#how-it-works)
 - [Daily Prompt (macOS)](#daily-prompt-macos)
 - [Running Manually](#running-manually)
 - [Checking Logs](#checking-logs)
@@ -33,6 +53,11 @@ If you work across many repositories (10, 30, 50+), they drift out of date fast.
 
 ## Quick Start
 
+### Prerequisites
+
+- **Git** (you already have this)
+- **Node.js 22+** or **Bun** — needed to run QMD. If QMD isn't installed, repofresh installs it automatically via `npm install -g @tobilu/qmd` or `bun install -g @tobilu/qmd`.
+
 ### 1. Clone this repo
 
 ```bash
@@ -41,7 +66,7 @@ git clone https://github.com/sophiagavrila/repofresh.git ~/repofresh
 
 ### 2. Set your workspace path
 
-Open `repofresh.sh` and change the `WORKSPACE_DIR` default on line 19 to the directory that contains all your repos:
+Open `repofresh.sh` and change line 19 to the directory that contains all your repos:
 
 ```bash
 WORKSPACE_DIR="${WORKSPACE_DIR:-/path/to/your/workspace}"
@@ -60,7 +85,25 @@ chmod +x ~/repofresh/repofresh-prompt.sh
 ~/repofresh/repofresh.sh
 ```
 
-That's it. Every git repo inside your workspace directory gets pulled to the latest.
+On first run, repofresh will:
+
+1. Install QMD if it's not already on your machine
+2. Pull the latest default branch (`main` or `master`) for every git repo in your workspace
+3. Register each repo as a QMD collection
+4. Index all source code files into the local QMD database
+
+After this, every repo in your workspace is searchable:
+
+```bash
+# Keyword search across all repos
+qmd search "authentication middleware"
+
+# Semantic search (finds conceptually related code)
+qmd vsearch "how are API errors handled"
+
+# Deep search with query expansion + reranking (best quality)
+qmd query "vulnerability notification routing logic"
+```
 
 ### 5. (Optional) Schedule the daily prompt
 
@@ -70,19 +113,21 @@ If you want macOS to ask you each morning at 9 AM whether to sync, see [Daily Pr
 
 ## What's in the Box
 
-Nothing is installed globally. The repo contains three files:
+Nothing is installed globally except QMD itself (on first run). The repo contains three files:
 
 | File | What it does |
 |------|-------------|
-| `repofresh.sh` | The sync script. Pulls every repo and optionally re-indexes your search tool. Run directly whenever you want. |
-| `repofresh-prompt.sh` | A wrapper that shows a native macOS dialog for your approval, then runs `repofresh.sh` in a Terminal window if you click "Sync Now". |
+| `repofresh.sh` | The main script. Installs QMD if needed, pulls every repo, registers new repos as QMD collections, and re-indexes everything. |
+| `repofresh-prompt.sh` | A wrapper that shows a native macOS approval dialog, then runs `repofresh.sh` in a Terminal window if you click "Sync Now". |
 | `com.repofresh.plist` | A macOS `launchd` agent config. When loaded, it triggers `repofresh-prompt.sh` at 9:00 AM every day. |
 
 Logs are written to `.repofresh-logs/` inside your workspace directory. They auto-rotate and keep the last 14 days.
 
 ---
 
-## How the Sync Works
+## How It Works
+
+### Step 1: Git Sync
 
 For **each subdirectory** in your workspace that contains a `.git` folder:
 
@@ -102,12 +147,23 @@ For **each subdirectory** in your workspace that contains a `.git` folder:
 5. Report: PULL (new commits), no output (already current), SKIP, or FAIL
 ```
 
-After all repos are processed, if [QMD](https://github.com/tobi/qmd) is installed:
+### Step 2: QMD Indexing
 
-1. **Auto-detect new repos** — any git repo in the workspace that doesn't have a matching QMD collection gets automatically added with the standard code file mask
-2. **Re-index all collections** — runs `qmd update` so changed files are searchable immediately
+After all repos are pulled:
 
-If QMD is not installed, the indexing step is silently skipped — the git sync works on its own.
+1. **Install QMD** if it's not already installed (via npm or bun)
+2. **Auto-detect new repos** — any git repo in the workspace that doesn't have a matching QMD collection gets registered automatically
+3. **Re-index all collections** — runs `qmd update` to parse changed files into the search database
+
+The file mask for auto-registered collections covers all common source code and config file types:
+
+```
+**/*.{py,go,js,ts,jsx,tsx,java,rs,rb,sh,yaml,yml,toml,json,md,html,css,sql,tf,hcl,Dockerfile,proto,graphql,gql}
+```
+
+### What gets indexed vs. what gets skipped
+
+QMD indexes source code, documentation, and configuration. It automatically skips `node_modules/`, `.git/`, `vendor/`, `dist/`, `build/`, and other generated directories.
 
 ---
 
@@ -181,14 +237,14 @@ macOS `launchd` is the native scheduler. Unlike cron, if your Mac is asleep at 9
 You don't need the daily prompt. Run the script directly anytime:
 
 ```bash
-# Full sync: pull all repos + re-index
+# Full sync: pull all repos + index with QMD
 ~/repofresh/repofresh.sh
 
-# Pull repos only, skip the search index update
+# Pull repos only, skip QMD indexing
 ~/repofresh/repofresh.sh --git-only
 
-# Re-index only, skip git pulls
-~/repofresh/repofresh.sh --qmd-only
+# Re-index with QMD only, skip git pulls
+~/repofresh/repofresh.sh --index-only
 ```
 
 Override the workspace directory without editing the script:
@@ -219,19 +275,23 @@ cat ~/workspace/.repofresh-logs/launchd-stdout.log
 
   PULL  vulnerability-aggregator (main) a1b2c3d → e4f5g6h
   PULL  wiz-therapy (main) 1234567 → 89abcde
+  NEW   Adding QMD collection: my-new-repo
   PULL  token-scanning-service (main) fedcba9 → 8765432
 
 --- Git sync complete ---
-    Total repos:  53
+    Total repos:  54
     Updated:      3
-    No changes:   49
+    No changes:   50
     Skipped:      0
     Failed:       1
 
---- Updating search index ---
+    Added 1 new QMD collection(s)
+
+--- Updating QMD search index ---
+Updating 54 collection(s)...
 ...
 
---- Index update complete ---
+--- QMD index update complete ---
 
 === repofresh finished at Tue Mar  3 09:01:45 PST 2026 ===
 ```
@@ -239,6 +299,7 @@ cat ~/workspace/.repofresh-logs/launchd-stdout.log
 | Status | Meaning |
 |--------|---------|
 | `PULL` | New commits were fetched from origin |
+| `NEW` | A repo was auto-registered as a new QMD collection |
 | *(no output)* | Repo was already up-to-date |
 | `SKIP` | Could not determine the default branch |
 | `FAIL` | `git pull` or `git fetch` failed (network issue, local divergence, etc.) |
@@ -256,18 +317,15 @@ Set the `WORKSPACE_DIR` environment variable, or edit the default at the top of 
 WORKSPACE_DIR="${WORKSPACE_DIR:-/your/path/here}"
 ```
 
-### Different search index tool
+### Vector embeddings
 
-The script calls `qmd update` at the end by default. To use a different indexing tool, replace the block near the bottom of `repofresh.sh`:
+After repofresh indexes your files, you can optionally generate vector embeddings for semantic search:
 
 ```bash
-if [ "$INDEX_UPDATE" = true ]; then
-  # Replace with your indexing command
-  your-index-tool rebuild
-fi
+qmd embed
 ```
 
-Or use `--git-only` and run your own indexing separately.
+This runs a local embedding model (embeddinggemma, ~300MB) on your machine to convert each code chunk into a vector. It takes a while on first run but is incremental after that — only new/changed chunks get embedded. Once embedded, `qmd vsearch` and `qmd query` return dramatically better results.
 
 ### Log retention
 
@@ -291,23 +349,23 @@ This script is designed to never damage your work:
 
 ## Using with AI Coding Tools
 
-The whole point of keeping repos fresh is so your AI tools see current code. Here's how this helps different setups:
-
 ### Claude Code
 
-Claude Code reads files directly from your filesystem. Fresh repos mean Claude sees the latest code when you ask questions or request changes across repositories.
+Claude Code reads files directly from your filesystem. With QMD indexed repos, you can also connect QMD as an [MCP server](https://github.com/tobi/qmd#mcp-server) so Claude can search across all your repos semantically — not just by filename or grep. Add to your Claude Code config:
 
-### QMD (local hybrid search index)
+```bash
+claude mcp add qmd -- qmd mcp
+```
 
-If you use [QMD](https://github.com/tobi/qmd) to index repos for hybrid search (BM25 + vector + LLM reranking), repofresh automatically adds any new repos as QMD collections and runs `qmd update` after pulling to re-index changed files. Clone a new repo into your workspace, run repofresh, and it's immediately searchable. Your search results always reflect the latest `main`.
+### GitHub Copilot / Cursor / Windsurf
 
-### GitHub Copilot / Cursor / Windsurf / Other Agents
-
-Any AI tool that reads your local workspace benefits from fresh files. Run repofresh before starting your workday and every tool that touches your codebase is working with current code.
+Any tool that reads your local workspace benefits from fresh files. Tools that support MCP can connect to QMD's MCP server for cross-repo semantic search. Tools without MCP support still benefit because the repos on disk are current.
 
 ### The general principle
 
-**Local files are the source of truth for local AI tools.** If your files are stale, your AI is stale. repofresh keeps them current.
+**Local files are the source of truth for local AI tools.** If your files are stale, your AI is stale. If your files aren't indexed, your AI has to scan every file on every query.
+
+repofresh keeps the files current. QMD makes them searchable. Together, your AI tools can reason over your entire codebase — across 50+ repos — in milliseconds.
 
 ---
 
@@ -320,6 +378,10 @@ rm ~/Library/LaunchAgents/com.repofresh.plist
 
 # Remove repofresh
 rm -rf ~/repofresh
+
+# Remove QMD and its index
+npm uninstall -g @tobilu/qmd
+rm -rf ~/.cache/qmd
 
 # Remove logs from your workspace
 rm -rf ~/workspace/.repofresh-logs
