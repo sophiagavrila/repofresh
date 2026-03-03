@@ -102,7 +102,12 @@ For **each subdirectory** in your workspace that contains a `.git` folder:
 5. Report: PULL (new commits), no output (already current), SKIP, or FAIL
 ```
 
-After all repos are processed, if [QMD](https://github.com/tobi/qmd) is installed, it runs `qmd update` to re-index changed files. If QMD is not installed, this step is silently skipped — the git sync works on its own.
+After all repos are processed, if [QMD](https://github.com/tobi/qmd) is installed:
+
+1. **Auto-detect new repos** — any git repo in the workspace that doesn't have a matching QMD collection gets automatically added with the standard code file mask
+2. **Re-index all collections** — runs `qmd update` so changed files are searchable immediately
+
+If QMD is not installed, the indexing step is silently skipped — the git sync works on its own.
 
 ---
 
@@ -294,7 +299,7 @@ Claude Code reads files directly from your filesystem. Fresh repos mean Claude s
 
 ### QMD (local hybrid search index)
 
-If you use [QMD](https://github.com/tobi/qmd) to index repos for hybrid search (BM25 + vector + LLM reranking), repofresh runs `qmd update` after pulling to re-index changed files. Your search results always reflect the latest `main`.
+If you use [QMD](https://github.com/tobi/qmd) to index repos for hybrid search (BM25 + vector + LLM reranking), repofresh automatically adds any new repos as QMD collections and runs `qmd update` after pulling to re-index changed files. Clone a new repo into your workspace, run repofresh, and it's immediately searchable. Your search results always reflect the latest `main`.
 
 ### GitHub Copilot / Cursor / Windsurf / Other Agents
 

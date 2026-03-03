@@ -154,6 +154,29 @@ fi
 
 if [ "$INDEX_UPDATE" = true ]; then
   if command -v qmd &>/dev/null; then
+    # Auto-register new repos as QMD collections
+    QMD_MASK='**/*.{py,go,js,ts,jsx,tsx,java,rs,rb,sh,yaml,yml,toml,json,md,html,css,sql,tf,hcl,Dockerfile,proto,graphql,gql}'
+    existing_collections=$(qmd collection list 2>/dev/null | grep -E '^\S' | grep -v '^Collections' | grep -v '^Examples' | sed 's/ .*//')
+    new_count=0
+
+    for repo_dir in "$WORKSPACE_DIR"/*/; do
+      [ -d "$repo_dir/.git" ] || continue
+      repo_name=$(basename "$repo_dir")
+
+      # Check if a collection already exists for this repo
+      if ! echo "$existing_collections" | grep -qx "$repo_name"; then
+        echo "  NEW   Adding QMD collection: $repo_name"
+        qmd collection add "$repo_dir" --name "$repo_name" --mask "$QMD_MASK" 2>&1 | sed 's/^/        /'
+        new_count=$((new_count + 1))
+      fi
+    done
+
+    if [ "$new_count" -gt 0 ]; then
+      echo ""
+      echo "    Added $new_count new QMD collection(s)"
+      echo ""
+    fi
+
     echo "--- Updating search index (QMD) ---"
     qmd update 2>&1
     echo ""
