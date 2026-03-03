@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.repofresh</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <!-- UPDATE THIS PATH to wherever you cloned repofresh -->
+        <string>/Users/YOU/repofresh/repofresh-prompt.sh</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <!-- UPDATE THIS to your home directory -->
+        <string>/Users/YOU</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <!-- UPDATE THIS PATH to your workspace -->
+    <string>/Users/YOU/workspace/.repofresh-logs/launchd-stdout.log</string>
+    <key>StandardErrorPath</key>
+    <!-- UPDATE THIS PATH to your workspace -->
+    <string>/Users/YOU/workspace/.repofresh-logs/launchd-stderr.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
